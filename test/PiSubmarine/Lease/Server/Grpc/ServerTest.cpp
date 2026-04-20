@@ -1,8 +1,8 @@
 #include <gtest/gtest.h>
-
 #include "PiSubmarine/Error/Api/MakeError.h"
 #include "PiSubmarine/Lease/Api/ILeaseIssuer.h"
 #include "PiSubmarine/Lease/Server/Grpc/Server.h"
+#include "PiSubmarine/Lease/Server/Grpc/ErrorCode.h"
 
 namespace PiSubmarine::Lease::Server::Grpc
 {
