@@ -6,6 +6,7 @@
 
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/security/server_credentials.h>
+#include <spdlog/spdlog.h>
 
 #include "PiSubmarine/Lease/Grpc/Api/LeaseService.h"
 #include "PiSubmarine/Error/Api/MakeError.h"
@@ -19,6 +20,17 @@ namespace PiSubmarine::Lease::Server::Grpc
         [[nodiscard]] Error::Api::Error MakeServerError(const ErrorCode code)
         {
             return Error::Api::MakeError(Error::Api::ErrorCondition::ContractError, make_error_code(code));
+        }
+
+        [[nodiscard]] std::shared_ptr<spdlog::logger> CreateLogger(Logging::Api::IFactory& loggerFactory)
+        {
+            auto logger = loggerFactory.CreateLogger("Lease.Server.Grpc");
+            if (!logger)
+            {
+                throw std::invalid_argument("Lease.Server.Grpc requires a logger factory that returns a logger");
+            }
+
+            return logger;
         }
 
         [[nodiscard]] bool IsPeerAuthenticated(::grpc::ServerContext* context)
@@ -53,8 +65,9 @@ namespace PiSubmarine::Lease::Server::Grpc
     class Server::Service final : public ::pisubmarine::lease::grpc::api::LeaseService::Service
     {
     public:
-        explicit Service(Api::ILeaseIssuer& leaseIssuer)
+        Service(Api::ILeaseIssuer& leaseIssuer, std::shared_ptr<spdlog::logger> logger)
             : m_LeaseIssuer(leaseIssuer)
+            , m_Logger(std::move(logger))
         {
         }
 
@@ -65,6 +78,7 @@ namespace PiSubmarine::Lease::Server::Grpc
         {
             if (!IsPeerAuthenticated(context))
             {
+                SPDLOG_LOGGER_WARN(m_Logger, "Rejected AcquireLease request because peer is not authenticated");
                 return ::grpc::Status(::grpc::StatusCode::UNAUTHENTICATED, "client certificate required");
             }
 
@@ -72,10 +86,20 @@ namespace PiSubmarine::Lease::Server::Grpc
                 .Resource = Api::ResourceId{.Value = request->resource()}});
             if (!result.has_value())
             {
+                SPDLOG_LOGGER_WARN(
+                    m_Logger,
+                    "AcquireLease failed for resource '{}': {}",
+                    request->resource(),
+                    result.error().Cause.message());
                 *response->mutable_error() = ToProtoError(result.error());
                 return ::grpc::Status::OK;
             }
 
+            SPDLOG_LOGGER_INFO(
+                m_Logger,
+                "AcquireLease succeeded for resource '{}' with lease '{}'",
+                result->Resource.Value,
+                result->Id.Value);
             *response->mutable_lease() = ToProtoLease(*result);
             return ::grpc::Status::OK;
         }
@@ -87,16 +111,27 @@ namespace PiSubmarine::Lease::Server::Grpc
         {
             if (!IsPeerAuthenticated(context))
             {
+                SPDLOG_LOGGER_WARN(m_Logger, "Rejected RenewLease request because peer is not authenticated");
                 return ::grpc::Status(::grpc::StatusCode::UNAUTHENTICATED, "client certificate required");
             }
 
             const auto result = m_LeaseIssuer.RenewLease(Api::LeaseId{.Value = request->lease_id()});
             if (!result.has_value())
             {
+                SPDLOG_LOGGER_WARN(
+                    m_Logger,
+                    "RenewLease failed for lease '{}': {}",
+                    request->lease_id(),
+                    result.error().Cause.message());
                 *response->mutable_error() = ToProtoError(result.error());
                 return ::grpc::Status::OK;
             }
 
+            SPDLOG_LOGGER_INFO(
+                m_Logger,
+                "RenewLease succeeded for lease '{}' on resource '{}'",
+                result->Id.Value,
+                result->Resource.Value);
             *response->mutable_lease() = ToProtoLease(*result);
             return ::grpc::Status::OK;
         }
@@ -108,29 +143,39 @@ namespace PiSubmarine::Lease::Server::Grpc
         {
             if (!IsPeerAuthenticated(context))
             {
+                SPDLOG_LOGGER_WARN(m_Logger, "Rejected ReleaseLease request because peer is not authenticated");
                 return ::grpc::Status(::grpc::StatusCode::UNAUTHENTICATED, "client certificate required");
             }
 
             const auto result = m_LeaseIssuer.ReleaseLease(Api::LeaseId{.Value = request->lease_id()});
             if (!result.has_value())
             {
+                SPDLOG_LOGGER_WARN(
+                    m_Logger,
+                    "ReleaseLease failed for lease '{}': {}",
+                    request->lease_id(),
+                    result.error().Cause.message());
                 *response->mutable_error() = ToProtoError(result.error());
                 return ::grpc::Status::OK;
             }
 
+            SPDLOG_LOGGER_INFO(m_Logger, "ReleaseLease succeeded for lease '{}'", request->lease_id());
             response->mutable_success();
             return ::grpc::Status::OK;
         }
 
     private:
         Api::ILeaseIssuer& m_LeaseIssuer;
+        std::shared_ptr<spdlog::logger> m_Logger;
     };
 
-    Server::Server(Api::ILeaseIssuer& leaseIssuer, TlsConfig tlsConfig)
+    Server::Server(Api::ILeaseIssuer& leaseIssuer, Logging::Api::IFactory& loggerFactory, TlsConfig tlsConfig)
         : m_LeaseIssuer(leaseIssuer)
+        , m_Logger(CreateLogger(loggerFactory))
         , m_TlsConfig(std::move(tlsConfig))
-        , m_Service(std::make_unique<Service>(m_LeaseIssuer))
+        , m_Service(std::make_unique<Service>(m_LeaseIssuer, m_Logger))
     {
+        SPDLOG_LOGGER_INFO(m_Logger, "Initialized gRPC lease server for address '{}'", m_TlsConfig.Address);
     }
 
     Server::~Server()
@@ -142,6 +187,7 @@ namespace PiSubmarine::Lease::Server::Grpc
     {
         if (m_Server)
         {
+            SPDLOG_LOGGER_WARN(m_Logger, "Rejected duplicate start request for gRPC lease server");
             return std::unexpected(MakeServerError(ErrorCode::AlreadyStarted));
         }
 
@@ -150,6 +196,7 @@ namespace PiSubmarine::Lease::Server::Grpc
             m_TlsConfig.ServerPrivateKey.empty() ||
             m_TlsConfig.ClientCertificateAuthority.empty())
         {
+            SPDLOG_LOGGER_ERROR(m_Logger, "Rejected start because mutual TLS configuration is incomplete");
             return std::unexpected(MakeServerError(ErrorCode::InvalidTlsConfiguration));
         }
 
@@ -169,9 +216,11 @@ namespace PiSubmarine::Lease::Server::Grpc
         m_Server = builder.BuildAndStart();
         if (!m_Server)
         {
+            SPDLOG_LOGGER_ERROR(m_Logger, "Failed to start gRPC lease server on '{}'", m_TlsConfig.Address);
             return std::unexpected(MakeServerError(ErrorCode::FailedToStart));
         }
 
+        SPDLOG_LOGGER_INFO(m_Logger, "Started gRPC lease server on '{}'", m_TlsConfig.Address);
         return {};
     }
 
@@ -182,6 +231,7 @@ namespace PiSubmarine::Lease::Server::Grpc
             return;
         }
 
+        SPDLOG_LOGGER_INFO(m_Logger, "Stopping gRPC lease server on '{}'", m_TlsConfig.Address);
         m_Server->Shutdown(std::chrono::system_clock::now());
         m_Server.reset();
     }

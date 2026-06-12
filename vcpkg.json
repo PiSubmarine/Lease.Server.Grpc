@@ -2,6 +2,7 @@
   "dependencies": [
     "grpc",
     "protobuf",
-    "gtest"
+    "gtest",
+    "spdlog"
   ]
 }

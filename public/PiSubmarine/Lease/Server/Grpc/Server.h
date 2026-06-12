@@ -5,6 +5,7 @@
 
 #include "PiSubmarine/Error/Api/Result.h"
 #include "PiSubmarine/Lease/Api/ILeaseIssuer.h"
+#include "PiSubmarine/Logging/Api/IFactory.h"
 
 namespace grpc
 {
@@ -24,7 +25,7 @@ namespace PiSubmarine::Lease::Server::Grpc
     class Server
     {
     public:
-        Server(Api::ILeaseIssuer& leaseIssuer, TlsConfig tlsConfig);
+        Server(Api::ILeaseIssuer& leaseIssuer, Logging::Api::IFactory& loggerFactory, TlsConfig tlsConfig);
         ~Server();
 
         [[nodiscard]] Error::Api::Result<void> Start();
@@ -35,6 +36,7 @@ namespace PiSubmarine::Lease::Server::Grpc
         class Service;
 
         Api::ILeaseIssuer& m_LeaseIssuer;
+        std::shared_ptr<spdlog::logger> m_Logger;
         TlsConfig m_TlsConfig;
         std::unique_ptr<Service> m_Service;
         std::unique_ptr<::grpc::Server> m_Server;

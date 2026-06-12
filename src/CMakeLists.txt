@@ -17,3 +17,6 @@ target_link_libraries(${PISUBMARINE_MODULE_NAME} PUBLIC PiSubmarine.Lease.Api)
 
 PiSubmarineAddDependency("https://github.com/PiSubmarine/Lease.Grpc.Api.git" "")
 target_link_libraries(${PISUBMARINE_MODULE_NAME} PUBLIC PiSubmarine.Lease.Grpc.Api)
+
+PiSubmarineAddDependency("https://github.com/PiSubmarine/Logging.Api.git" "")
+target_link_libraries(${PISUBMARINE_MODULE_NAME} PUBLIC PiSubmarine.Logging.Api)
