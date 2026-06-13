@@ -5,7 +5,6 @@ include(FetchContent)
 project(${PISUBMARINE_MODULE_NAME}.Test LANGUAGES CXX)
 
 set(${PISUBMARINE_MODULE_NAME}.Test.Sources
-        "PiSubmarine/Lease/Server/Grpc/ErrorCodeTest.cpp"
         "PiSubmarine/Lease/Server/Grpc/ServerTest.cpp")
 
 enable_testing()

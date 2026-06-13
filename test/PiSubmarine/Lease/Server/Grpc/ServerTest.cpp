@@ -5,8 +5,7 @@
 
 #include "PiSubmarine/Error/Api/MakeError.h"
 #include "PiSubmarine/Lease/Api/ILeaseIssuer.h"
-#include "PiSubmarine/Lease/Server/Grpc/Server.h"
-#include "PiSubmarine/Lease/Server/Grpc/ErrorCode.h"
+#include "PiSubmarine/Lease/Server/Grpc/Adapter.h"
 #include "PiSubmarine/Logging/Api/IFactory.h"
 
 namespace PiSubmarine::Lease::Server::Grpc
@@ -32,6 +31,15 @@ namespace PiSubmarine::Lease::Server::Grpc
             }
         };
 
+        class NullLoggerFactory final : public Logging::Api::IFactory
+        {
+        public:
+            [[nodiscard]] std::shared_ptr<spdlog::logger> CreateLogger(std::string_view) override
+            {
+                return {};
+            }
+        };
+
         class LoggerFactoryStub final : public Logging::Api::IFactory
         {
         public:
@@ -44,14 +52,19 @@ namespace PiSubmarine::Lease::Server::Grpc
         };
     }
 
-    TEST(ServerTest, RejectsInvalidTlsConfiguration)
+    TEST(ServerTest, RequiresLoggerFactoryToReturnLogger)
+    {
+        DummyIssuer issuer;
+        NullLoggerFactory loggerFactory;
+
+        EXPECT_THROW((Adapter(issuer, loggerFactory)), std::invalid_argument);
+    }
+
+    TEST(ServerTest, ConstructsWithValidLoggerFactory)
     {
         DummyIssuer issuer;
         LoggerFactoryStub loggerFactory;
-        Server server(issuer, loggerFactory, TlsConfig{});
 
-        const auto result = server.Start();
-        ASSERT_FALSE(result.has_value());
-        EXPECT_EQ(result.error().Cause, make_error_code(ErrorCode::InvalidTlsConfiguration));
+        EXPECT_NO_THROW((Adapter(issuer, loggerFactory)));
     }
 }
