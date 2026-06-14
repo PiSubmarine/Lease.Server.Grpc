@@ -14,7 +14,7 @@ namespace PiSubmarine::Lease::Server::Grpc
         ::grpc::Status AcquireLease(
             ::grpc::ServerContext* context,
             const ::pisubmarine::lease::grpc::api::AcquireLeaseRequest* request,
-            ::pisubmarine::lease::grpc::api::LeaseResult* response) override;
+            ::pisubmarine::lease::grpc::api::LeaseGrantResult* response) override;
         ::grpc::Status RenewLease(
             ::grpc::ServerContext* context,
             const ::pisubmarine::lease::grpc::api::RenewLeaseRequest* request,

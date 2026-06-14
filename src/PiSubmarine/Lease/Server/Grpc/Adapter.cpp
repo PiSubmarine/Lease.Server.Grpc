@@ -1,5 +1,7 @@
 #include "PiSubmarine/Lease/Server/Grpc/Adapter.h"
 
+#include <cstddef>
+#include <string>
 #include <stdexcept>
 
 #include <spdlog/spdlog.h>
@@ -48,6 +50,18 @@ namespace PiSubmarine::Lease::Server::Grpc
             protoLease.set_duration_ms(lease.Duration.count());
             return protoLease;
         }
+
+        [[nodiscard]] std::string ToProtoLeaseSecret(const Api::LeaseSecret& secret)
+        {
+            std::string bytes;
+            bytes.reserve(secret.Value.size());
+            for (const auto value : secret.Value)
+            {
+                bytes.push_back(static_cast<char>(std::to_integer<unsigned char>(value)));
+            }
+
+            return bytes;
+        }
     }
 
     Adapter::Adapter(Api::ILeaseIssuer& leaseIssuer, Logging::Api::IFactory& loggerFactory)
@@ -59,7 +73,7 @@ namespace PiSubmarine::Lease::Server::Grpc
     ::grpc::Status Adapter::AcquireLease(
         ::grpc::ServerContext* context,
         const ::pisubmarine::lease::grpc::api::AcquireLeaseRequest* request,
-        ::pisubmarine::lease::grpc::api::LeaseResult* response)
+        ::pisubmarine::lease::grpc::api::LeaseGrantResult* response)
     {
         if (!IsPeerAuthenticated(context))
         {
@@ -83,9 +97,10 @@ namespace PiSubmarine::Lease::Server::Grpc
         SPDLOG_LOGGER_INFO(
             m_Logger,
             "AcquireLease succeeded for resource '{}' with lease '{}'",
-            result->Resource.Value,
-            result->Id.Value);
-        *response->mutable_lease() = ToProtoLease(*result);
+            result->Lease.Resource.Value,
+            result->Lease.Id.Value);
+        *response->mutable_lease_grant()->mutable_lease() = ToProtoLease(result->Lease);
+        response->mutable_lease_grant()->set_secret(ToProtoLeaseSecret(result->Secret));
         return ::grpc::Status::OK;
     }
 

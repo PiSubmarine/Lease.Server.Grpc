@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <cstddef>
 #include <memory>
 #include <spdlog/logger.h>
 #include <spdlog/sinks/null_sink.h>
@@ -15,7 +16,7 @@ namespace PiSubmarine::Lease::Server::Grpc
         class DummyIssuer final : public Api::ILeaseIssuer
         {
         public:
-            Error::Api::Result<Api::Lease> AcquireLease(const Api::LeaseRequest&) override
+            Error::Api::Result<Api::LeaseGrant> AcquireLease(const Api::LeaseRequest&) override
             {
                 return std::unexpected(Error::Api::MakeError(Error::Api::ErrorCondition::UnknownError));
             }
