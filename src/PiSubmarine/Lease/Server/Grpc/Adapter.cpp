@@ -97,9 +97,9 @@ namespace PiSubmarine::Lease::Server::Grpc
         SPDLOG_LOGGER_INFO(
             m_Logger,
             "AcquireLease succeeded for resource '{}' with lease '{}'",
-            result->Lease.Resource.Value,
-            result->Lease.Id.Value);
-        *response->mutable_lease_grant()->mutable_lease() = ToProtoLease(result->Lease);
+            result->GrantedLease.Resource.Value,
+            result->GrantedLease.Id.Value);
+        *response->mutable_lease_grant()->mutable_lease() = ToProtoLease(result->GrantedLease);
         response->mutable_lease_grant()->set_secret(ToProtoLeaseSecret(result->Secret));
         return ::grpc::Status::OK;
     }
